@@ -61,6 +61,7 @@ export function useTasksSWR(projectId: string | null) {
     const tempTask: Task = {
       id: tempId,
       user_id: user.id,
+      team_id: null,
       project_id: projectId,
       status_id: statusId,
       title,

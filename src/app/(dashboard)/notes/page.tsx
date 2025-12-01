@@ -262,106 +262,95 @@ export default function NotesPage() {
 
   return (
     <div className="flex h-[calc(100vh-120px)] md:h-[calc(100vh-100px)] -mx-4 sm:-mx-6 lg:-mx-8 -my-6 sm:-my-8">
-      {/* Mobile sidebar toggle */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="md:hidden fixed top-[72px] left-4 z-30 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700"
-      >
-        <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
-
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          'fixed md:relative z-20 h-full w-64 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transition-transform md:translate-x-0 flex flex-col',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        )}
-      >
-        {/* Sidebar header */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Notes</h2>
-            <Button onClick={handleCreateNote} size="sm">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </Button>
-          </div>
-        </div>
-
-        {/* Notes list */}
-        <div className="flex-1 overflow-auto p-2">
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="p-3 rounded-lg">
-                  <Skeleton className="h-4 w-3/4 mb-2" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              ))}
-            </div>
-          ) : notes.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">No notes yet</p>
-              <Button onClick={handleCreateNote} variant="secondary" size="sm">
-                Create your first note
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {notes.map((note, index) => (
-                <motion.button
-                  key={note.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  onClick={() => {
-                    setSelectedNoteId(note.id);
-                    setSidebarOpen(false);
-                  }}
-                  className={cn(
-                    'w-full text-left p-3 rounded-lg transition-colors',
-                    selectedNoteId === note.id
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                      : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
-                  )}
-                >
-                  <div className="font-medium truncate">{note.title || 'Untitled'}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {formatDate(note.updated_at)}
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {/* Overlay for mobile sidebar */}
+      {/* Backdrop for mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-10 md:hidden"
+          className="md:hidden fixed inset-0 bg-black/50 z-30"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          'fixed md:static inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-200 ease-in-out',
+          'md:transform-none md:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+          'pt-16 md:pt-0'
+        )}
+      >
+        <div className="flex flex-col h-full">
+          {/* Sidebar header */}
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="font-semibold text-gray-900 dark:text-white">Notes</h2>
+          </div>
+
+          {/* Notes list */}
+          <div className="flex-1 overflow-auto p-2">
+            {isLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="p-3 rounded-lg">
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : notes.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                No notes yet
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {notes.map((note, index) => (
+                  <motion.button
+                    key={note.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    onClick={() => {
+                      setSelectedNoteId(note.id);
+                      setSidebarOpen(false);
+                    }}
+                    className={cn(
+                      'w-full text-left p-3 rounded-lg transition-colors',
+                      selectedNoteId === note.id
+                        ? 'bg-gray-100 dark:bg-gray-700'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    )}
+                  >
+                    <div className="font-medium truncate text-sm text-gray-900 dark:text-white">{note.title || 'Untitled'}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {formatDate(note.updated_at)}
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add note button */}
+          <div className="p-2 pb-20 md:pb-4 border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={handleCreateNote}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+            >
+              <span className="w-5 h-5 rounded-full border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </span>
+              <span className="text-sm">New Note</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+
       {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-800">
+      <main className="flex-1 flex flex-col overflow-hidden">
         {isLoading ? (
-          <div className="flex-1 flex flex-col">
-            {/* Header skeleton */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <div className="md:hidden w-10" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-8 w-24 rounded-lg" />
-                <Skeleton className="h-8 w-16 rounded-lg" />
-              </div>
-            </div>
+          <div className="flex-1 flex flex-col bg-white dark:bg-gray-800">
             {/* Title skeleton */}
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <Skeleton className="h-9 w-1/3" />
@@ -384,17 +373,23 @@ export default function NotesPage() {
             </div>
           </div>
         ) : selectedNote ? (
-          <>
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-800">
+            {/* Note header */}
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
-                <div className="md:hidden w-10" />
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="md:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
                   {getWordCount(editContent)} words
                   {isSaving && <span className="ml-2">Saving...</span>}
-                </div>
+                </span>
               </div>
-
               <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
@@ -431,33 +426,38 @@ export default function NotesPage() {
                 placeholder="Start writing... Use the toolbar or type / for commands"
               />
             </div>
-          </>
+          </div>
         ) : (
-          <FadeIn direction="up" className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          <div className="flex-1 flex flex-col">
+            {/* Mobile hamburger for empty state */}
+            <div className="md:hidden px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                {notes.length === 0 ? 'Create your first note' : 'Select a note'}
-              </h2>
-              <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-sm">
-                {notes.length === 0
-                  ? 'Write rich notes with formatting, code blocks, tables, and more'
-                  : 'Choose a note from the sidebar to view or edit'}
-              </p>
-              {notes.length === 0 && (
-                <Button onClick={handleCreateNote}>
-                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  New Note
-                </Button>
-              )}
+              </button>
             </div>
-          </FadeIn>
+            <FadeIn direction="up" className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  {notes.length === 0 ? 'Create your first note' : 'Select a note'}
+                </h2>
+                <p className="text-gray-500 dark:text-gray-400 max-w-sm">
+                  {notes.length === 0
+                    ? 'Write rich notes with formatting, code blocks, tables, and more'
+                    : 'Choose a note from the sidebar to view or edit'}
+                </p>
+              </div>
+            </FadeIn>
+          </div>
         )}
       </main>
 

@@ -27,7 +27,7 @@ async function fetchCalendarEvents(
   return getCalendarEvents(accessToken, 'primary', timeMin, timeMax);
 }
 
-export function useGoogleCalendarSWR(currentMonth: Date) {
+export function useGoogleCalendarSWR(currentMonth: Date, enabled: boolean = true) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isTokenLoading, setIsTokenLoading] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -38,8 +38,15 @@ export function useGoogleCalendarSWR(currentMonth: Date) {
   const timeMin = useMemo(() => startOfWeek(startOfMonth(currentMonth)), [currentMonth]);
   const timeMax = useMemo(() => endOfWeek(endOfMonth(currentMonth)), [currentMonth]);
 
-  // Get access token
+  // Get access token (only when enabled)
   useEffect(() => {
+    if (!enabled) {
+      setIsTokenLoading(false);
+      setAccessToken(null);
+      setTokenError(null);
+      return;
+    }
+
     const getToken = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -86,7 +93,7 @@ export function useGoogleCalendarSWR(currentMonth: Date) {
     });
 
     return () => subscription.unsubscribe();
-  }, [supabase]);
+  }, [supabase, enabled]);
 
   // Cache key for SWR
   const cacheKey = getCalendarKey(accessToken, monthKey);

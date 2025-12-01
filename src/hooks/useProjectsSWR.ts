@@ -3,23 +3,30 @@
 import useSWR, { mutate } from 'swr';
 import { useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useTeamStore } from '@/stores/teamStore';
 import type { Project, ProjectStatus } from '@/types';
 import { DEFAULT_STATUSES, PROJECT_COLORS } from '@/lib/constants';
 
-const PROJECTS_KEY = 'projects';
+const getProjectsKey = (mode: 'personal' | 'team', teamId: string | null) =>
+  mode === 'team' && teamId ? `projects-team-${teamId}` : 'projects-personal';
 const STATUSES_KEY = 'project-statuses';
 
 // Fetcher for projects
-async function fetchProjects(): Promise<Project[]> {
+async function fetchProjects(mode: 'personal' | 'team', teamId: string | null): Promise<Project[]> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) return [];
 
-  const { data, error } = await (supabase
-    .from('projects') as any)
-    .select('*')
-    .order('position', { ascending: true }) as { data: Project[] | null; error: Error | null };
+  let query = (supabase.from('projects') as any).select('*');
+
+  if (mode === 'team' && teamId) {
+    query = query.eq('team_id', teamId);
+  } else {
+    query = query.is('team_id', null).eq('user_id', user.id);
+  }
+
+  const { data, error } = await query.order('position', { ascending: true }) as { data: Project[] | null; error: Error | null };
 
   if (error) throw error;
   return data || [];
@@ -52,13 +59,15 @@ async function fetchStatuses(projectIds: string[]): Promise<Record<string, Proje
 
 export function useProjectsSWR() {
   const supabase = createClient();
+  const { mode, activeTeamId } = useTeamStore();
+  const projectsKey = getProjectsKey(mode, activeTeamId);
 
   // Fetch projects with SWR
   const {
     data: projects = [],
     error: projectsError,
     isLoading: projectsLoading,
-  } = useSWR<Project[]>(PROJECTS_KEY, fetchProjects, {
+  } = useSWR<Project[]>(projectsKey, () => fetchProjects(mode, activeTeamId), {
     revalidateOnMount: true,
     keepPreviousData: true,
   });
@@ -84,12 +93,14 @@ export function useProjectsSWR() {
     if (!user) throw new Error('Not authenticated');
 
     const projectColor = color || PROJECT_COLORS[projects.length % PROJECT_COLORS.length];
+    const teamId = mode === 'team' ? activeTeamId : null;
 
     // Create temp project for optimistic update
     const tempId = `temp-${Date.now()}`;
     const tempProject: Project = {
       id: tempId,
       user_id: user.id,
+      team_id: teamId,
       name,
       color: projectColor,
       position: projects.length,
@@ -99,13 +110,14 @@ export function useProjectsSWR() {
 
     try {
       // Optimistic update
-      await mutate(PROJECTS_KEY, [...projects, tempProject], false);
+      await mutate(projectsKey, [...projects, tempProject], false);
 
       // Create project
       const { data: project, error: projectError } = await (supabase
         .from('projects') as any)
         .insert({
           user_id: user.id,
+          team_id: teamId,
           name,
           color: projectColor,
           position: projects.length,
@@ -130,7 +142,7 @@ export function useProjectsSWR() {
 
       // Update with real data
       await mutate(
-        PROJECTS_KEY,
+        projectsKey,
         (current: Project[] | undefined) =>
           (current || []).map(p => p.id === tempId ? project : p),
         false
@@ -146,10 +158,10 @@ export function useProjectsSWR() {
       return project;
     } catch (err) {
       // Rollback on error
-      await mutate(PROJECTS_KEY);
+      await mutate(projectsKey);
       throw err;
     }
-  }, [supabase, projects, projectIds, statuses]);
+  }, [supabase, projects, projectIds, statuses, projectsKey, mode, activeTeamId]);
 
   // Update project
   const updateProject = useCallback(async (id: string, updates: Partial<Pick<Project, 'name' | 'color' | 'position'>>) => {
@@ -158,7 +170,7 @@ export function useProjectsSWR() {
     try {
       // Optimistic update
       await mutate(
-        PROJECTS_KEY,
+        projectsKey,
         projects.map(p => p.id === id ? { ...p, ...updates } : p),
         false
       );
@@ -174,7 +186,7 @@ export function useProjectsSWR() {
 
       // Update with server data
       await mutate(
-        PROJECTS_KEY,
+        projectsKey,
         (current: Project[] | undefined) =>
           (current || []).map(p => p.id === id ? data : p),
         false
@@ -182,10 +194,10 @@ export function useProjectsSWR() {
 
       return data;
     } catch (err) {
-      await mutate(PROJECTS_KEY, previousProjects, false);
+      await mutate(projectsKey, previousProjects, false);
       throw err;
     }
-  }, [supabase, projects]);
+  }, [supabase, projects, projectsKey]);
 
   // Delete project
   const deleteProject = useCallback(async (id: string) => {
@@ -194,7 +206,7 @@ export function useProjectsSWR() {
 
     try {
       // Optimistic update
-      await mutate(PROJECTS_KEY, projects.filter(p => p.id !== id), false);
+      await mutate(projectsKey, projects.filter(p => p.id !== id), false);
 
       const { error } = await (supabase
         .from('projects') as any)
@@ -208,11 +220,11 @@ export function useProjectsSWR() {
       delete newStatuses[id];
       await mutate([STATUSES_KEY, ...projectIds.filter(pid => pid !== id)], newStatuses, false);
     } catch (err) {
-      await mutate(PROJECTS_KEY, previousProjects, false);
+      await mutate(projectsKey, previousProjects, false);
       await mutate([STATUSES_KEY, ...projectIds], previousStatuses, false);
       throw err;
     }
-  }, [supabase, projects, statuses, projectIds]);
+  }, [supabase, projects, statuses, projectIds, projectsKey]);
 
   // Add status to project
   const addStatus = useCallback(async (projectId: string, name: string, icon: string = '📋', color: string = 'bg-gray-100 dark:bg-gray-800') => {
@@ -374,11 +386,11 @@ export function useProjectsSWR() {
 
   // Manual refetch
   const refetch = useCallback(() => {
-    mutate(PROJECTS_KEY);
+    mutate(projectsKey);
     if (projectIds.length > 0) {
       mutate([STATUSES_KEY, ...projectIds]);
     }
-  }, [projectIds]);
+  }, [projectIds, projectsKey]);
 
   return {
     projects,

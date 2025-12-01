@@ -3,13 +3,15 @@
 import useSWR, { mutate } from 'swr';
 import { useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useTeamStore } from '@/stores/teamStore';
 import { sanitizeHtml, sanitizeText, validateNoteTitle } from '@/lib/validation';
 import type { Note } from '@/types';
 
-const NOTES_KEY = 'notes';
+const getNotesKey = (mode: 'personal' | 'team', teamId: string | null) =>
+  mode === 'team' && teamId ? `notes-team-${teamId}` : 'notes-personal';
 
 // Fetcher function for SWR
-async function fetchNotes(): Promise<Note[]> {
+async function fetchNotes(mode: 'personal' | 'team', teamId: string | null): Promise<Note[]> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -17,10 +19,15 @@ async function fetchNotes(): Promise<Note[]> {
     return [];
   }
 
-  const { data, error } = await (supabase
-    .from('notes') as any)
-    .select('*')
-    .order('updated_at', { ascending: false }) as { data: Note[] | null; error: Error | null };
+  let query = (supabase.from('notes') as any).select('*');
+
+  if (mode === 'team' && teamId) {
+    query = query.eq('team_id', teamId);
+  } else {
+    query = query.is('team_id', null).eq('user_id', user.id);
+  }
+
+  const { data, error } = await query.order('updated_at', { ascending: false }) as { data: Note[] | null; error: Error | null };
 
   if (error) throw error;
   return data || [];
@@ -28,10 +35,12 @@ async function fetchNotes(): Promise<Note[]> {
 
 export function useNotesSWR() {
   const supabase = createClient();
+  const { mode, activeTeamId } = useTeamStore();
+  const notesKey = getNotesKey(mode, activeTeamId);
 
   const { data: notes = [], error, isLoading, isValidating } = useSWR<Note[]>(
-    NOTES_KEY,
-    fetchNotes,
+    notesKey,
+    () => fetchNotes(mode, activeTeamId),
     {
       // Keep the data fresh but show cached immediately
       revalidateOnMount: true,
@@ -54,12 +63,14 @@ export function useNotesSWR() {
 
       const sanitizedTitle = sanitizeText(title, 255);
       const sanitizedContent = sanitizeHtml(content);
+      const teamId = mode === 'team' ? activeTeamId : null;
 
       // Optimistic update - add temp note immediately
       const tempId = `temp-${Date.now()}`;
       const tempNote: Note = {
         id: tempId,
         user_id: user.id,
+        team_id: teamId,
         title: sanitizedTitle,
         content: sanitizedContent,
         created_at: new Date().toISOString(),
@@ -68,7 +79,7 @@ export function useNotesSWR() {
 
       // Update cache optimistically
       await mutate(
-        NOTES_KEY,
+        notesKey,
         (current: Note[] | undefined) => [tempNote, ...(current || [])],
         false // Don't revalidate yet
       );
@@ -78,6 +89,7 @@ export function useNotesSWR() {
         .from('notes') as any)
         .insert({
           user_id: user.id,
+          team_id: teamId,
           title: sanitizedTitle,
           content: sanitizedContent,
         })
@@ -89,7 +101,7 @@ export function useNotesSWR() {
       // Replace temp note with real note
       if (data) {
         await mutate(
-          NOTES_KEY,
+          notesKey,
           (current: Note[] | undefined) =>
             (current || []).map(n => n.id === tempId ? data : n),
           false
@@ -99,11 +111,11 @@ export function useNotesSWR() {
       return data;
     } catch (err) {
       // Revert optimistic update on error
-      await mutate(NOTES_KEY);
+      await mutate(notesKey);
       console.error('Failed to create note:', err);
       throw err;
     }
-  }, [supabase]);
+  }, [supabase, notesKey, mode, activeTeamId]);
 
   // Update a note with optimistic update
   const updateNote = useCallback(async (id: string, updates: { title?: string; content?: string }): Promise<Note | null> => {
@@ -127,7 +139,7 @@ export function useNotesSWR() {
 
       // Optimistic update
       await mutate(
-        NOTES_KEY,
+        notesKey,
         (current: Note[] | undefined) =>
           (current || []).map(n => n.id === id ? { ...n, ...sanitizedUpdates } : n),
         false
@@ -145,7 +157,7 @@ export function useNotesSWR() {
       // Update with actual server data
       if (data) {
         await mutate(
-          NOTES_KEY,
+          notesKey,
           (current: Note[] | undefined) =>
             (current || []).map(n => n.id === id ? data : n),
           false
@@ -155,11 +167,11 @@ export function useNotesSWR() {
       return data;
     } catch (err) {
       // Revert on error
-      await mutate(NOTES_KEY);
+      await mutate(notesKey);
       console.error('Failed to update note:', err);
       throw err;
     }
-  }, [supabase]);
+  }, [supabase, notesKey]);
 
   // Delete a note with optimistic update
   const deleteNote = useCallback(async (id: string): Promise<boolean> => {
@@ -169,7 +181,7 @@ export function useNotesSWR() {
     try {
       // Optimistic update - remove immediately
       await mutate(
-        NOTES_KEY,
+        notesKey,
         (current: Note[] | undefined) => (current || []).filter(n => n.id !== id),
         false
       );
@@ -183,16 +195,16 @@ export function useNotesSWR() {
       return true;
     } catch (err) {
       // Rollback on error
-      await mutate(NOTES_KEY, previousNotes, false);
+      await mutate(notesKey, previousNotes, false);
       console.error('Failed to delete note:', err);
       throw err;
     }
-  }, [supabase, notes]);
+  }, [supabase, notes, notesKey]);
 
   // Manual refetch
   const refetch = useCallback(() => {
-    return mutate(NOTES_KEY);
-  }, []);
+    return mutate(notesKey);
+  }, [notesKey]);
 
   return {
     notes,

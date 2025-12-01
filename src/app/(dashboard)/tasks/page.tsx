@@ -459,16 +459,23 @@ export default function TasksPage() {
       />
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="md:hidden w-10" /> {/* Spacer for mobile toggle */}
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-              {selectedProject?.name || 'Tasks'}
-            </h1>
-          </div>
+        {/* Mobile hamburger header */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <span className="font-medium text-gray-900 dark:text-white">
+            {selectedProject?.name || 'Tasks'}
+          </span>
           {selectedProject && projectStatuses.length > 0 && (
-            <Button onClick={openAddModal}>Add Task</Button>
+            <Button size="sm" onClick={openAddModal} className="ml-auto">
+              Add Task
+            </Button>
           )}
         </div>
 
@@ -516,11 +523,6 @@ export default function TasksPage() {
               onDragEnd={handleDragEnd}
             >
               <div className="relative h-full">
-                {/* Fade gradient on left edge */}
-                <div className="absolute left-0 top-0 bottom-4 w-12 bg-gradient-to-r from-gray-50 dark:from-gray-900 to-transparent pointer-events-none z-10" />
-                {/* Fade gradient on right edge */}
-                <div className="absolute right-0 top-0 bottom-4 w-12 bg-gradient-to-l from-gray-50 dark:from-gray-900 to-transparent pointer-events-none z-10" />
-
                 <div
                   ref={scrollContainerRef}
                   className="flex gap-3 md:gap-6 overflow-x-auto h-full pb-4 snap-x snap-mandatory md:snap-none px-8"

@@ -20,7 +20,10 @@ import {
 } from 'date-fns';
 import { Button, Card, Modal, Input, FadeIn, StaggerContainer, StaggerItem, Skeleton, useToast, ConfirmModal } from '@/components/ui';
 import { useGoogleCalendarSWR } from '@/hooks/useGoogleCalendarSWR';
+import { useTeamCalendarSWR } from '@/hooks/useTeamCalendarSWR';
+import { useTeamStore } from '@/stores/teamStore';
 import type { GoogleCalendarEvent } from '@/lib/google-calendar';
+import type { TeamEvent } from '@/types';
 import { CALENDAR_COLORS, TIME_UNITS, TIMELINE_CONFIG } from '@/lib/constants';
 
 interface LocalEvent {
@@ -31,7 +34,9 @@ interface LocalEvent {
   endDate?: Date;
   isAllDay: boolean;
   isGoogleEvent: boolean;
+  isTeamEvent: boolean;
   color: string;
+  creatorName?: string;
 }
 
 const HOURS = Array.from({ length: TIME_UNITS.HOURS_PER_DAY }, (_, i) => i);
@@ -160,12 +165,30 @@ function parseGoogleEvent(event: GoogleCalendarEvent): LocalEvent {
     endDate: endStr ? parseISO(endStr) : undefined,
     isAllDay,
     isGoogleEvent: true,
+    isTeamEvent: false,
     color: 'bg-blue-500',
+  };
+}
+
+function parseTeamEvent(event: TeamEvent): LocalEvent {
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description || undefined,
+    date: parseISO(event.start_time),
+    endDate: parseISO(event.end_time),
+    isAllDay: event.is_all_day,
+    isGoogleEvent: false,
+    isTeamEvent: true,
+    color: event.color,
+    creatorName: event.profile?.display_name || undefined,
   };
 }
 
 export default function CalendarPage() {
   const { showToast } = useToast();
+  const { mode, activeTeamId } = useTeamStore();
+  const isTeamMode = mode === 'team' && activeTeamId;
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -183,21 +206,41 @@ export default function CalendarPage() {
   const [modalTab, setModalTab] = useState<'timeline' | 'events'>('timeline');
   const [eventToDelete, setEventToDelete] = useState<LocalEvent | null>(null);
 
-  // Use SWR-based hook for cached calendar events
+  // Use SWR-based hook for Google Calendar (personal mode only)
   const {
     events: googleEvents,
     isConnected,
-    isLoading,
-    isValidating,
-    error,
-    addEvent,
-    editEvent,
-    removeEvent,
+    isLoading: googleLoading,
+    isValidating: googleValidating,
+    error: googleError,
+    addEvent: addGoogleEvent,
+    editEvent: editGoogleEvent,
+    removeEvent: removeGoogleEvent,
     prefetchMonth,
-  } = useGoogleCalendarSWR(currentMonth);
+  } = useGoogleCalendarSWR(currentMonth, !isTeamMode);
 
-  // Convert Google events to local events format
-  const events = useMemo(() => googleEvents.map(parseGoogleEvent), [googleEvents]);
+  // Use team calendar hook (team mode)
+  const {
+    events: teamEvents,
+    isLoading: teamLoading,
+    isValidating: teamValidating,
+    error: teamError,
+    addEvent: addTeamEvent,
+    editEvent: editTeamEvent,
+    removeEvent: removeTeamEvent,
+  } = useTeamCalendarSWR(isTeamMode ? activeTeamId : null, currentMonth);
+
+  // Convert events to local format based on mode
+  const events = useMemo(() => {
+    if (isTeamMode) {
+      return teamEvents.map(parseTeamEvent);
+    }
+    return googleEvents.map(parseGoogleEvent);
+  }, [isTeamMode, googleEvents, teamEvents]);
+
+  const isLoading = isTeamMode ? teamLoading : googleLoading;
+  const isValidating = isTeamMode ? teamValidating : googleValidating;
+  const error = isTeamMode ? teamError : googleError;
 
   // Prefetch adjacent months when current month changes
   useEffect(() => {
@@ -264,7 +307,9 @@ export default function CalendarPage() {
 
   const handleSubmitEvent = async () => {
     if (!eventTitle.trim() || !eventDate) return;
-    if (!isConnected) {
+
+    // Check permissions based on mode
+    if (!isTeamMode && !isConnected) {
       showToast('Please connect Google Calendar to add events.', 'error');
       return;
     }
@@ -272,47 +317,68 @@ export default function CalendarPage() {
     try {
       setIsSyncing(true);
 
-      let start: { dateTime: string; timeZone: string } | { date: string };
-      let end: { dateTime: string; timeZone: string } | { date: string };
-
       // Get user's timezone
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      if (isAllDay) {
-        start = { date: eventDate };
-        end = { date: eventDate };
+      // Calculate start and end times
+      const [startHour, startMin] = startTime.split(':').map(Number);
+      const [endHour, endMin] = endTime.split(':').map(Number);
+
+      const startDateObj = new Date(eventDate);
+      startDateObj.setHours(isAllDay ? 0 : startHour, isAllDay ? 0 : startMin, 0, 0);
+
+      const endDateObj = new Date(eventDate);
+      endDateObj.setHours(isAllDay ? 23 : endHour, isAllDay ? 59 : endMin, isAllDay ? 59 : 0, 0);
+
+      if (isTeamMode) {
+        // Team calendar events
+        if (editingEvent) {
+          await editTeamEvent(editingEvent.id, {
+            title: eventTitle,
+            description: eventDescription || undefined,
+            start_time: startDateObj.toISOString(),
+            end_time: endDateObj.toISOString(),
+            is_all_day: isAllDay,
+            color: selectedColor,
+          });
+        } else {
+          await addTeamEvent({
+            title: eventTitle,
+            description: eventDescription || undefined,
+            start_time: startDateObj.toISOString(),
+            end_time: endDateObj.toISOString(),
+            is_all_day: isAllDay,
+            color: selectedColor,
+          });
+        }
       } else {
-        // Create proper Date objects and get ISO string
-        const [startHour, startMin] = startTime.split(':').map(Number);
-        const [endHour, endMin] = endTime.split(':').map(Number);
+        // Google Calendar events
+        let start: { dateTime: string; timeZone: string } | { date: string };
+        let end: { dateTime: string; timeZone: string } | { date: string };
 
-        const startDateObj = new Date(eventDate);
-        startDateObj.setHours(startHour, startMin, 0, 0);
+        if (isAllDay) {
+          start = { date: eventDate };
+          end = { date: eventDate };
+        } else {
+          start = { dateTime: startDateObj.toISOString(), timeZone };
+          end = { dateTime: endDateObj.toISOString(), timeZone };
+        }
 
-        const endDateObj = new Date(eventDate);
-        endDateObj.setHours(endHour, endMin, 0, 0);
-
-        // Use full ISO format with timezone offset
-        start = { dateTime: startDateObj.toISOString(), timeZone };
-        end = { dateTime: endDateObj.toISOString(), timeZone };
-      }
-
-      if (editingEvent) {
-        // Update existing event - SWR handles optimistic update internally
-        await editEvent(editingEvent.id, {
-          summary: eventTitle,
-          description: eventDescription || undefined,
-          start,
-          end,
-        });
-      } else {
-        // Create new event - SWR handles optimistic update internally
-        await addEvent({
-          summary: eventTitle,
-          description: eventDescription || undefined,
-          start,
-          end,
-        });
+        if (editingEvent) {
+          await editGoogleEvent(editingEvent.id, {
+            summary: eventTitle,
+            description: eventDescription || undefined,
+            start,
+            end,
+          });
+        } else {
+          await addGoogleEvent({
+            summary: eventTitle,
+            description: eventDescription || undefined,
+            start,
+            end,
+          });
+        }
       }
 
       resetForm();
@@ -326,12 +392,16 @@ export default function CalendarPage() {
   };
 
   const handleDeleteEvent = async (event: LocalEvent) => {
-    if (!isConnected) return;
+    if (!isTeamMode && !isConnected) return;
 
     try {
       setIsSyncing(true);
-      // SWR handles optimistic update internally
-      await removeEvent(event.id);
+
+      if (event.isTeamEvent) {
+        await removeTeamEvent(event.id);
+      } else {
+        await removeGoogleEvent(event.id);
+      }
 
       if (editingEvent?.id === event.id) {
         resetForm();
@@ -359,7 +429,9 @@ export default function CalendarPage() {
       {/* Mobile header */}
       <div className="sm:hidden">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Calendar</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {isTeamMode ? 'Team Calendar' : 'Calendar'}
+          </h1>
           <Button variant="secondary" size="sm" onClick={() => setCurrentMonth(new Date())}>
             Today
           </Button>
@@ -385,13 +457,19 @@ export default function CalendarPage() {
             </svg>
           </button>
         </div>
-        {isConnected && (
+        {isTeamMode ? (
+          <p className="text-xs text-purple-600 dark:text-purple-400 flex items-center gap-1 mt-1">
+            <span className="w-1.5 h-1.5 bg-purple-500 rounded-full"></span>
+            Team shared calendar
+            {(isSyncing || isValidating) && <span className="ml-1 text-gray-500">(syncing...)</span>}
+          </p>
+        ) : isConnected ? (
           <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 mt-1">
             <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
             Google Calendar synced
             {(isSyncing || isValidating) && <span className="ml-1 text-gray-500">(syncing...)</span>}
           </p>
-        )}
+        ) : null}
         {error && (
           <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
             {error}
@@ -402,14 +480,22 @@ export default function CalendarPage() {
       {/* Desktop header */}
       <div className="hidden sm:flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Calendar</h1>
-          {isConnected && (
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            {isTeamMode ? 'Team Calendar' : 'Calendar'}
+          </h1>
+          {isTeamMode ? (
+            <p className="text-sm text-purple-600 dark:text-purple-400 flex items-center gap-1 mt-1">
+              <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+              Team shared calendar
+              {(isSyncing || isValidating) && <span className="ml-2 text-gray-500">(syncing...)</span>}
+            </p>
+          ) : isConnected ? (
             <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1 mt-1">
               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
               Synced with Google Calendar
               {(isSyncing || isValidating) && <span className="ml-2 text-gray-500">(syncing...)</span>}
             </p>
-          )}
+          ) : null}
           {error && (
             <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
               {error}
@@ -619,7 +705,7 @@ export default function CalendarPage() {
                                 {!event.isAllDay && event.endDate && ` - ${format(event.endDate, 'h:mm a')}`}
                                 {event.isAllDay && 'All day'}
                                 {' • '}
-                                {event.isGoogleEvent ? 'Google Calendar' : 'Local'}
+                                {event.isTeamEvent ? (event.creatorName || 'Team') : event.isGoogleEvent ? 'Google Calendar' : 'Local'}
                               </span>
                             </div>
                           </div>
@@ -701,7 +787,7 @@ export default function CalendarPage() {
                         />
                       </div>
                     )}
-                    {!isConnected && !editingEvent && (
+                    {(isTeamMode || (!isConnected && !editingEvent)) && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Color

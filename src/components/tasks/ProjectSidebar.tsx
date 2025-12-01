@@ -63,20 +63,6 @@ export function ProjectSidebar({
 
   return (
     <>
-      {/* Mobile toggle button */}
-      <button
-        onClick={onToggle}
-        className="md:hidden fixed top-[72px] left-4 z-40 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          {isOpen ? (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          )}
-        </svg>
-      </button>
-
       {/* Backdrop for mobile */}
       {isOpen && (
         <div

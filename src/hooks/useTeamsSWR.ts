@@ -242,7 +242,7 @@ export function useTeamJoinRequests(teamId: string | null) {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(teamIdOrCode);
     if (!isUUID) {
       // Use RPC function to bypass RLS and lookup team by invite code
-      const { data: teamId, error: teamError } = await supabase
+      const { data: teamId, error: teamError } = await (supabase as any)
         .rpc('get_team_id_by_invite_code', { code: teamIdOrCode });
 
       if (teamError || !teamId) {

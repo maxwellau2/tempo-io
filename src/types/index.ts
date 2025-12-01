@@ -1,7 +1,7 @@
 export type TaskPriority = 'low' | 'medium' | 'high';
 export type TeamRole = 'leader' | 'admin' | 'member';
 export type RequestStatus = 'pending' | 'accepted' | 'rejected';
-export type MessageType = 'text' | 'meet';
+export type MessageType = 'text' | 'meet' | 'link';
 
 // Project types
 export interface Project {
@@ -145,7 +145,7 @@ export interface TeamMessage {
   user_id: string;
   content: string;
   type: MessageType;
-  metadata: { meet_link?: string } | null;
+  metadata: { meet_link?: string; link_url?: string; link_title?: string } | null;
   edited_at: string | null;
   created_at: string;
   profile?: Profile;

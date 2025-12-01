@@ -1,0 +1,2 @@
+- all comments, readmes are to be succint with less fluff, no emojis, like a tired but accurate developer.
+- all code is to be self describing

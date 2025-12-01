@@ -515,7 +515,22 @@ export default function TasksPage() {
               <p className="text-gray-500 dark:text-gray-400">Select a project from the sidebar</p>
             </FadeIn>
           ) : (
-            <DndContext
+            <>
+              {/* Desktop Add Task button */}
+              {projectStatuses.length > 0 && (
+                <div className="hidden md:flex justify-end mb-4">
+                  <button
+                    onClick={openAddModal}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Task
+                  </button>
+                </div>
+              )}
+              <DndContext
               sensors={sensors}
               collisionDetection={closestCorners}
               onDragStart={handleDragStart}
@@ -570,6 +585,7 @@ export default function TasksPage() {
                 )}
               </DragOverlay>
             </DndContext>
+            </>
           )}
         </div>
       </main>
